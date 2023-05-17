@@ -3,6 +3,7 @@ use sha256::digest;
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::Read;
+use std::time::Instant;
 use std::{fs, println};
 
 fn get_file_as_byte_vec(filename: &String, size: u32) -> Vec<u8> {
@@ -21,6 +22,7 @@ fn get_file_as_byte_vec(filename: &String, size: u32) -> Vec<u8> {
 }
 
 fn main() {
+    let now = Instant::now();
     let number_of_cpus = num_cpus::get();
     let bytes_to_read = 16384;
     let paths = fs::read_dir("/Users/ariel/Movies").unwrap();
@@ -61,4 +63,7 @@ fn main() {
             println!("key: {}, value: {:?}\n\n", key, value);
         }
     }
+
+    let elapsed = now.elapsed();
+    println!("Elapsed: {:.2?}", elapsed);
 }
