@@ -3,6 +3,8 @@ use sha256::digest;
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::Read;
+use std::sync::{Arc, Mutex};
+use std::thread;
 use std::time::Instant;
 use std::{fs, println};
 
@@ -25,43 +27,60 @@ fn main() {
     let now = Instant::now();
     let number_of_cpus = num_cpus::get();
     let bytes_to_read = 16384;
-    let paths = fs::read_dir("/Users/ariel/Movies").unwrap();
-    let mut files_hashmap: HashMap<String, Vec<String>> = HashMap::new();
 
-    let mut count = 0;
-    for path in paths {
-        let unwrapped_path = path.unwrap();
-        if !unwrapped_path.path().is_dir() {
-            let bytes = get_file_as_byte_vec(
-                &unwrapped_path.path().to_str().unwrap().to_string(),
-                bytes_to_read,
-            );
+    let paths: Vec<String> = fs::read_dir("/Users/ariel/Movies")
+        .unwrap()
+        .filter_map(|entry| {
+            entry.ok().and_then(|e| {
+                let path = e.path();
+                if e.file_type().map(|ft| ft.is_file()).unwrap_or(false) {
+                    path.into_os_string().into_string().ok()
+                } else {
+                    None
+                }
+            })
+        })
+        .collect();
 
-            let hex_string = hex::encode(bytes);
-            let digest = digest(hex_string);
+    let files_hashmap: Arc<Mutex<HashMap<String, Vec<String>>>> =
+        Arc::new(Mutex::new(HashMap::new()));
+    let shared_paths = Arc::new(Mutex::new(paths));
 
-            // digest acts as our key
-            if files_hashmap.contains_key(&digest) {
-                let file_array = files_hashmap.get_mut(&digest).unwrap();
-                file_array.push(unwrapped_path.path().to_str().unwrap().to_string());
-            } else {
-                files_hashmap.insert(
-                    digest.clone(),
-                    vec![unwrapped_path.path().to_str().unwrap().to_string()],
-                );
-            }
-        };
-        count += 1;
-    }
-    println!("files count: {}", count);
-    println!("files_hashmap count: {}", files_hashmap.len());
-    println!("Hello, world! {} cpus", number_of_cpus);
-    println!("files_hashmap: {:?}", files_hashmap);
+    let thread_handles: Vec<_> = (0..number_of_cpus)
+        .map(|_| {
+            let shared_strings = Arc::clone(&shared_paths); // Clone the Arc to move into the thread
+            let hashmap = Arc::clone(&files_hashmap);
+            thread::spawn(move || {
+                loop {
+                    let string_opt;
+                    {
+                        let mut strings = shared_strings.lock().unwrap(); // Acquire the lock to access the list
+                        if strings.is_empty() {
+                            break; // Exit the loop if the list is empty
+                        }
+                        string_opt = strings.pop(); // Get the next string from the list
+                    }
 
-    for (key, value) in files_hashmap.iter() {
-        if value.len() > 5 {
-            println!("key: {}, value: {:?}\n\n", key, value);
-        }
+                    if let Some(string) = string_opt {
+                        let bytes = get_file_as_byte_vec(&string, bytes_to_read);
+                        let hex_string = hex::encode(bytes);
+                        let digest = digest(hex_string);
+
+                        let mut map = hashmap.lock().unwrap();
+                        if map.contains_key(&digest) {
+                            let file_array = map.get_mut(&digest).unwrap();
+                            file_array.push(string);
+                        } else {
+                            map.insert(digest.clone(), vec![string]);
+                        }
+                    }
+                }
+            })
+        })
+        .collect();
+
+    for handle in thread_handles {
+        handle.join().unwrap();
     }
 
     let elapsed = now.elapsed();
