@@ -26,7 +26,7 @@ fn get_file_as_byte_vec(filename: &String, size: u32) -> Vec<u8> {
 fn main() {
     let now = Instant::now();
     let number_of_cpus = num_cpus::get();
-    let bytes_to_read = 16384;
+    let bytes_to_read = 16384 * 4;
 
     let paths: Vec<String> = fs::read_dir("/Users/ariel/Movies")
         .unwrap()
