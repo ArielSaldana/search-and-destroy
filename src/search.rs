@@ -22,12 +22,8 @@ fn get_file_as_byte_vec(filename: &String, size: u32) -> Vec<u8> {
     }
 }
 
-pub fn search() {
-    println!("Searching...");
-    let number_of_cpus = num_cpus::get();
-    let bytes_to_read = 16384 * 4;
-
-    let paths: Vec<String> = fs::read_dir("/Users/ariel/Movies")
+fn get_files_from_directory(directory_path: &str) -> Vec<String> {
+    fs::read_dir(directory_path)
         .unwrap()
         .filter_map(|entry| {
             entry.ok().and_then(|e| {
@@ -39,7 +35,15 @@ pub fn search() {
                 }
             })
         })
-        .collect();
+        .collect()
+}
+
+pub fn search() -> HashMap<String, Vec<String>> {
+    println!("Searching...");
+    let number_of_cpus = num_cpus::get();
+    let bytes_to_read = 16384 * 4;
+
+    let paths = get_files_from_directory("/Users/ariel/Movies");
 
     let files_hashmap: Arc<Mutex<HashMap<String, Vec<String>>>> =
         Arc::new(Mutex::new(HashMap::new()));
@@ -81,4 +85,9 @@ pub fn search() {
     for handle in thread_handles {
         handle.join().unwrap();
     }
+
+    return Arc::try_unwrap(files_hashmap)
+        .unwrap()
+        .into_inner()
+        .unwrap();
 }
